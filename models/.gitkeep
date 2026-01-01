@@ -1,0 +1,4 @@
+# This directory contains ComfyUI models
+# Download models using: ./download_models_local.sh
+# The models will be copied into the Docker image during build
+

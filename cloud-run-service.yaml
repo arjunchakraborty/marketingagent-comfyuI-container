@@ -1,0 +1,36 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: comfyui
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cpu-throttling: "false"
+    spec:
+      containerConcurrency: 10
+      timeoutSeconds: 300
+      containers:
+      - image: gcr.io/PROJECT_ID/comfyui:latest
+        ports:
+        - name: http1
+          containerPort: 8188
+        env:
+        - name: COMFYUI_HOST
+          value: "0.0.0.0"
+        - name: COMFYUI_PORT
+          value: "8188"
+        resources:
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+  traffic:
+  - percent: 100
+    latestRevision: true
+
