@@ -1,0 +1,44 @@
+
+services:
+  comfyui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comfyui
+    ports:
+      - "8188:8188"
+    volumes:
+      # Mount model directories directly from host to ComfyUI models directory
+      # This ensures models are not stored in the image, but loaded from the host filesystem
+      - ./models/checkpoints:/ComfyUI/models/unet
+      - ./models/clip:/ComfyUI/models/clip
+      - ./models/vae:/ComfyUI/models/vae
+      # Optional: mount other model directories if needed
+      - ./models/loras:/ComfyUI/models/loras
+      - ./models/upscale_models:/ComfyUI/models/upscale_models
+      - ./models/controlnet:/ComfyUI/models/controlnet
+      - ./models/embeddings:/ComfyUI/models/embeddings
+    command: >
+      bash -c "
+        cd /ComfyUI &&
+        python3 main.py --cpu --multi-user --listen ${COMFYUI_HOST:-0.0.0.0} --port ${COMFYUI_PORT:-8188}
+      "
+    environment:
+      - PATH=/opt/venv/bin:$PATH
+      - VIRTUAL_ENV=/opt/venv
+      - PYTHONUNBUFFERED=1
+      - COMFYUI_HOST=0.0.0.0
+      - COMFYUI_PORT=8188
+    user: pwuser
+    working_dir: /app
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    # Optional: adjust memory/CPU limits based on your system
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 8G
+    #       cpus: '4'
+
+

@@ -5,7 +5,7 @@ echo "Starting ComfyUI..."
 
 # ComfyUI is installed in /app/ComfyUI
 COMFYUI_DIR="/app/ComfyUI"
-cd "$COMFYUI_DIR"
+export COMFYUI_DIR="$COMFYUI_DIR"
 
 # Force CPU mode if no GPU is available
 export CUDA_VISIBLE_DEVICES=""
@@ -16,9 +16,7 @@ export PYTORCH_NO_CUDA_MEMORY_CACHING=1
 
 echo "Running in CPU mode (GPU not available in Cloud Run)"
 
-# Start ComfyUI server
-python main.py \
-    --listen ${COMFYUI_HOST:-0.0.0.0} \
-    --port ${COMFYUI_PORT:-8188} \
-    --enable-cors-header "*"
+# Use wrapper script to patch torch before starting ComfyUI
+# This prevents "Torch not compiled with CUDA enabled" assertion errors
+python /app/start_comfyui.py
 

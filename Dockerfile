@@ -1,82 +1,54 @@
-# Use Python base image
-FROM python:3.11-slim
+# Stage 1: Build Python dependencies with uv (Python 3.12 pinned)
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0
 
-# Set working directory
-WORKDIR /app
+ARG COMFYUI_VERSION=v0.5.1
 
-# Install system dependencies
+# Clone ComfyUI
+RUN apt-get update && apt-get install -y git && \
+    git clone --depth 1 --branch ${COMFYUI_VERSION} \
+    https://github.com/comfyanonymous/ComfyUI.git /ComfyUI
+
+# Create venv and install all Python dependencies
+ENV VIRTUAL_ENV=/opt/venv
+RUN uv venv $VIRTUAL_ENV
+RUN uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
+    uv pip install -r /ComfyUI/requirements.txt && \
+    uv pip install wait-for-it
+
+# Stage 2: Final image with Playwright
+FROM mcr.microsoft.com/playwright:v1.57.0-noble
+
+# Install pnpm
+RUN npm install -g pnpm
+
+# Install fonts to match GitHub Actions runner
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        wget \
-        curl \
-        git \
-        gcc \
-        g++ \
-        make \
-        libglib2.0-0 \
-        libgomp1 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+      fonts-dejavu-core fonts-noto-core fonts-noto-cjk fonts-ubuntu && \
+    rm -rf /var/lib/apt/lists/*
 
-# Clone ComfyUI repository
-RUN git clone https://github.com/comfyanonymous/ComfyUI.git /app/ComfyUI
+# Copy venv and ComfyUI from builder
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /ComfyUI /ComfyUI
 
-# Set working directory to ComfyUI
-WORKDIR /app/ComfyUI
+# Fix venv Python symlinks to point to system Python (builder used /usr/local/bin/python)
+RUN ln -sf /usr/bin/python3 /opt/venv/bin/python && \
+    ln -sf python /opt/venv/bin/python3 && \
+    ln -sf python /opt/venv/bin/python3.12
 
-# Install CPU-only PyTorch first (for Google Cloud compatibility)
-# This prevents CUDA dependencies that won't work in Cloud Run
-RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# Set up Python paths
+ENV PATH="/opt/venv/bin:$PATH"
+ENV VIRTUAL_ENV="/opt/venv"
 
-# Create a filtered requirements file without torch packages
-RUN grep -v "^torch" requirements.txt | grep -v "^torchvision" | grep -v "^torchaudio" > requirements_filtered.txt || cp requirements.txt requirements_filtered.txt
+# Create devtools directory (for mounting/copying at runtime)
+RUN mkdir -p /ComfyUI/custom_nodes/ComfyUI_devtools
 
-# Install Python dependencies (excluding torch packages already installed)
-RUN pip install --no-cache-dir -r requirements_filtered.txt
-
-# Install additional packages for model downloads
-RUN pip install --no-cache-dir huggingface_hub
-
-# Install ComfyUI Manager (custom node manager)
-RUN git clone https://github.com/ltdrdata/ComfyUI-Manager.git /app/ComfyUI/custom_nodes/ComfyUI-Manager
-
-# Create directories for models (ComfyUI expects models in ComfyUI/models/)
-RUN mkdir -p /app/ComfyUI/models/checkpoints \
-    /app/ComfyUI/models/vae \
-    /app/ComfyUI/models/loras \
-    /app/ComfyUI/models/upscale_models \
-    /app/ComfyUI/models/controlnet \
-    /app/ComfyUI/models/clip \
-    /app/ComfyUI/models/embeddings
-
-# Copy models from local directory if they exist (faster than downloading during build)
-# Models should be downloaded locally first using: ./download_models_local.sh
-# Note: If models/ directory doesn't exist, create an empty one to avoid COPY errors
-COPY models/ /tmp/models/
-RUN if [ -d "/tmp/models" ] && [ "$(ls -A /tmp/models 2>/dev/null)" ]; then \
-        echo "Copying local models into image..."; \
-        cp -r /tmp/models/* /app/ComfyUI/models/ 2>/dev/null || true; \
-        echo "Models copied successfully"; \
-    else \
-        echo "No local models found in models/ directory"; \
-        echo "Models will need to be downloaded separately or added to the image"; \
-    fi
-
-# Copy entrypoint script
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+# Set ownership for pwuser (from Playwright base image)
+RUN mkdir -p /app && chown -R pwuser:pwuser /ComfyUI /opt/venv /app
 
 # Expose ComfyUI port (default is 8188)
 EXPOSE 8188
 
-# Set environment variables for Google Cloud
-ENV PYTHONUNBUFFERED=1
-ENV COMFYUI_HOST=0.0.0.0
-ENV COMFYUI_PORT=8188
-# Force CPU mode for Google Cloud Run (no GPU support)
-ENV CUDA_VISIBLE_DEVICES=""
-ENV PYTORCH_ENABLE_MPS_FALLBACK=1
-
-# Use entrypoint script
-ENTRYPOINT ["/app/entrypoint.sh"]
-
+USER pwuser
+WORKDIR /app

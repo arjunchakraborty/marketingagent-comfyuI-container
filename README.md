@@ -2,9 +2,9 @@
 
 This container runs ComfyUI and can be deployed to Google Cloud Platform.
 
-## Downloading Models (Recommended)
+## Downloading Models (Required for Local Development)
 
-To avoid downloading models every time you build the Docker image, download them locally first:
+Models are mounted from the host filesystem via volume mounts, so you need to download them locally first:
 
 ```bash
 # Install huggingface-cli if not already installed
@@ -18,22 +18,42 @@ export HF_TOKEN=your_token
 ./download_models_local.sh
 ```
 
-This will download all required Flux.1-dev models to a local `models/` directory, which will be copied into the Docker image during build.
+This will download all required Flux.1-dev models to a local `models/` directory. These models will be mounted into the container at runtime, **not copied into the Docker image**. This keeps the image size small and allows you to update models without rebuilding.
 
 ## Building the Image
 
 ```bash
-# Build with local models (faster, no re-downloads)
-docker build -t comfyui:latest .
-
-# Or build without local models (models will need to be downloaded separately)
+# Build the image (models are not included in the image)
 docker build -t comfyui:latest .
 ```
 
+The image does not contain models - they are mounted from your local filesystem when running with docker-compose.
+
 ## Running Locally
 
+### Using Docker Compose (Recommended)
+
 ```bash
-docker run -p 8188:8188 comfyui:latest
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+```
+
+The `docker-compose.yml` file automatically mounts the model directories from `./models/` into the container. Access ComfyUI at http://localhost:8188
+
+### Using Docker Run
+
+```bash
+docker run -p 8188:8188 \
+  -v $(pwd)/models/checkpoints:/app/ComfyUI/models/checkpoints \
+  -v $(pwd)/models/clip:/app/ComfyUI/models/clip \
+  -v $(pwd)/models/vae:/app/ComfyUI/models/vae \
+  comfyui:latest
 ```
 
 Access ComfyUI at http://localhost:8188
@@ -76,7 +96,10 @@ Edit `download_models_local.sh` to add your required models. The script download
 - ControlNet: `./models/controlnet/`
 - etc.
 
-These models are then copied into the Docker image during build, avoiding re-downloads on every build.
+These models are mounted into the container at runtime via volume mounts (configured in `docker-compose.yml`). This means:
+- Models are **not** stored in the Docker image (keeping it small)
+- You can update models on the host filesystem without rebuilding the image
+- Changes to models are immediately available in the container
 
 ### Model Requirements
 
