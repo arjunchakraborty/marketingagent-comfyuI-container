@@ -1,14 +1,23 @@
 steps:
-  # Build the container image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/comfyui:latest', '.']
-  
-  # Push the container image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/comfyui:latest']
+  # Configure Docker to use gcloud as a credential helper for Artifact Registry
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud auth configure-docker us-docker.pkg.dev --quiet
 
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-docker.pkg.dev/temporal-data-483423-j0/comfyui/comfyui:latest', '.']
+
+  # Push the Docker image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-docker.pkg.dev/temporal-data-483423-j0/comfyui/comfyui:latest']
+
+# Images to be pushed to Artifact Registry
 images:
-  - 'gcr.io/$PROJECT_ID/comfyui:latest'
+  - 'us-docker.pkg.dev/temporal-data-483423-j0/comfyui/comfyui:latest'
 
 options:
   machineType: 'E2_HIGHCPU_8'

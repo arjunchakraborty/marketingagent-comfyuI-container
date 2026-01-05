@@ -14,7 +14,7 @@ spec:
       containerConcurrency: 10
       timeoutSeconds: 300
       containers:
-      - image: gcr.io/PROJECT_ID/comfyui:latest
+      - image: us-docker.pkg.dev/temporal-data-483423-j0/comfyui/comfyui:latest
         ports:
         - name: http1
           containerPort: 8188
